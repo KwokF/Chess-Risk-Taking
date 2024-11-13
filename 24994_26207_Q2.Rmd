@@ -1,0 +1,544 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+## does riskiness payoff
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$Game_type <- as.factor(df1$Game_type)
+
+
+## Taking logs
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+
+# # split them up into game type
+# df1_blitz <- df1[df1$Game_type == "Blitz", ]
+# df1_rapid <- df1[df1$Game_type == "Rapid", ]
+# df1_bullet <- df1[df1$Game_type == "Bullet", ]
+# df1_classical <- df1[df1$Game_type == "Classical", ]
+# df1_ultrabullet <- df1[df1$Game_type == "UltraBullet", ]
+# 
+
+
+```
+
+```{r}
+### keeping only those with more than 5000 occurances
+
+table(df1$Game_type)
+
+# counting the occurrences of each Game_type 
+game_type_counts <- table(df1$Game_type)
+
+# finding Game_type types with 1000 or more occurrences
+game_types_to_keep <- names(game_type_counts[game_type_counts >= 5000])
+
+# filtering df1 to keep only rows with Game_type types over 1000 
+df1 <- subset(df1, Game_type %in% game_types_to_keep)
+df1$Game_type <- factor(df1$Game_type)
+
+
+table(df1$Game_type)
+
+```
+
+
+```{r}
+names(df1)
+
+
+```
+
+```{r}
+if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
+library(nnet)
+
+# Changing the outcome variable, labelling the results
+df1$Result <- factor(df1$Result, levels = c(2, 1, 0), labels = c("Draw", "White wins", "Black wins"))
+
+# Running the multinomial logistic regression model
+model <- multinom(Result ~ sd_average_difference_logged * Game_type, data = df1)
+
+# model summary
+summary(model)
+```
+
+
+```{r}
+# calculating z-values
+z_values <- coef(model) / summary(model)$standard.errors
+
+# calculating p-values
+p_values <- 2 * (1 - pnorm(abs(z_values)))
+```
+
+
+```{r}
+library(broom)
+
+tidy_output <- tidy(model)
+
+print(tidy_output)
+
+```
+
+```{r}
+
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+```
+
+
+```{r}
+## looking at the output table
+tab_model(model, digits = 5)
+```
+
+
+```{r}
+### seeing he effect of time control
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$TimeControl <- as.factor(df1$TimeControl)
+
+
+## getting the average difference 
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+
+
+```
+
+
+```{r}
+
+table(df1$TimeControl)
+
+# Count the occurrences of each Game_type type
+TimeControl_counts <- table(df1$TimeControl)
+
+TimeControl_to_keep <- c("600+0", "600+5", "900+10", "120+1", "30+0", "60+0", "180+0", "180+2", "300+0")
+
+df1 <- subset(df1, TimeControl %in% TimeControl_to_keep)
+df1$TimeControl <- factor(df1$TimeControl)
+
+# changing the name so easier to understand
+new_labels <- c("600+0" = "600+0 (Rapid)", "600+5" = "600+5 (Rapid)", "900+10" = "900+10 (Rapid)",
+                "120+1" = "120+1 (Bullet)", "30+0" = "30+0 (Bullet)", "60+0" = "60+0 (Bullet)",
+                "180+0" = "180+0 (Blitz)", "180+2" = "180+2 (Blitz)", "300+0" = "300+0 (Blitz)")
+
+# Map the new labels onto the existing factor levels
+df1$TimeControl <- factor(df1$TimeControl, levels = names(new_labels), labels = new_labels)
+
+
+table(df1$TimeControl)
+```
+
+
+```{r}
+# Ensure Result includes three categories: "Black wins", "White wins", "Draw"
+df1$Result <- factor(df1$Result, levels = c(2, 1, 0), labels = c("Draw", "White wins", "Black wins"))
+
+model <- multinom(Result ~ sd_average_difference_logged * TimeControl, data = df1)
+
+summary(model)
+```
+
+
+```{r}
+z_values <- coef(model) / summary(model)$standard.errors
+
+p_values <- 2 * (1 - pnorm(abs(z_values)))
+
+print(p_values)
+```
+
+
+
+```{r}
+library(broom)
+tidy_output <- tidy(model)
+
+print(tidy_output)
+
+```
+
+
+```{r}
+#### Compare between the X+0 games, investigating how the games ended
+
+# Load the necessary library
+library(dplyr)
+
+# Filtering relevant time controls
+relevant_time_controls <- c("600+0", "30+0", "60+0", "180+0", "300+0")
+df1 <- df1 %>% filter(TimeControl %in% relevant_time_controls)
+
+# percentage of "Time forfeit" terminations for each time control
+result <- df1 %>%
+  group_by(TimeControl) %>%
+  summarise(
+    total_games = n(),
+    forfeit_count = sum(Termination == "Time forfeit"),
+    white_wins_in_forfeit = sum(Termination == "Time forfeit" & Result == 1),
+    black_wins_in_forfeit = sum(Termination == "Time forfeit" & Result == 0),
+    forfeit_percentage = (forfeit_count / total_games) * 100,
+    white_win_percentage_in_forfeits = ifelse(forfeit_count > 0, (white_wins_in_forfeit / forfeit_count) * 100, 0),
+    black_win_percentage_in_forfeits = ifelse(forfeit_count > 0, (black_wins_in_forfeit / forfeit_count) * 100, 0)
+  )
+
+# Viewing the result
+print(result)
+
+```
+
+
+```{r}
+library(dplyr)
+
+# Filtering for when Termination is because of "Time forfeit" and result is black winning
+time_forfeit_result_two <- df1 %>%
+  filter(Termination == "Time forfeit" & Result == 2)
+
+# Viewing the rows
+print(time_forfeit_result_two)
+
+
+```
+
+
+
+
+```{r}
+####### Creating the models using 3 different dataframes based on the game type instead of using Game_type as a predictor 
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$Game_type <- as.factor(df1$Game_type)
+df1$Result <- factor(df1$Result, levels = c(0, 1, 2), labels = c("Black wins", "White wins", "Draw"))
+
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+
+# split them up into game type
+df1_blitz <- df1[df1$Game_type == "Blitz", ]
+df1_rapid <- df1[df1$Game_type == "Rapid", ]
+df1_bullet <- df1[df1$Game_type == "Bullet", ]
+
+
+```
+
+```{r}
+library(ggplot2)
+
+# Blitz
+ggplot(df1_blitz, aes(x = Result)) +
+  geom_bar(aes(fill = Result), show.legend = FALSE) +
+  ggtitle("Class Imbalance in Blitz Games") +
+  xlab("Game Result") +
+  ylab("Count")
+
+# Rapid
+ggplot(df1_rapid, aes(x = Result)) +
+  geom_bar(aes(fill = Result), show.legend = FALSE) +
+  ggtitle("Class Imbalance in Rapid Games") +
+  xlab("Game Result") +
+  ylab("Count")
+
+# Bullet
+ggplot(df1_bullet, aes(x = Result)) +
+  geom_bar(aes(fill = Result), show.legend = FALSE) +
+  ggtitle("Class Imbalance in Bullet Games") +
+  xlab("Game Result") +
+  ylab("Count")
+
+```
+
+```{r}
+## Trying to see if downsampling helps
+library(dplyr)
+
+# Downsampling
+downsample_df <- function(df) {
+  # Find the smallest class size
+  min_size <- min(table(df$Result))
+  
+  # Downsample each class
+  df_downsampled <- df %>%
+    group_by(Result) %>%
+    sample_n(size = min_size, replace = FALSE) %>%
+    ungroup()
+  
+  return(df_downsampled)
+}
+
+# using the downsampling function 
+df1_blitz <- downsample_df(df1_blitz)
+df1_rapid <- downsample_df(df1_rapid)
+df1_bullet <- downsample_df(df1_bullet)
+
+```
+
+```{r}
+# running model on downsampled dataset (didn't include in report)
+model_blitz <- multinom(Result ~ sd_average_difference_logged, data = df1_blitz)
+model_rapid <- multinom(Result ~ sd_average_difference_logged, data = df1_rapid)
+model_bullet <- multinom(Result ~ sd_average_difference_logged, data = df1_bullet)
+
+
+
+# Summary of the model to see coefficients and statistics
+summary(model_blitz)
+summary(model_rapid)
+summary(model_bullet)
+
+
+```
+
+
+```{r}
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+
+## Nice output table
+tab_model(model_blitz, digits = 5)
+tab_model(model_rapid, digits = 5)
+tab_model(model_bullet, digits = 5)
+
+```
+
+
+
+```{r}
+## doing the plots
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$Game_type <- as.factor(df1$Game_type)
+
+
+## getting the average difference 
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+df1$average_white_sd_logged <- log(df1$average_white_sd + 1)
+df1$average_black_sd_logged <- log(df1$average_black_sd + 1)
+
+
+table(df1$Game_type)
+
+# counting the occurrences of each Game_type type
+game_type_counts <- table(df1$Game_type)
+
+# Find Game_type types with 500 or more occurrences
+game_types_to_keep <- names(game_type_counts[game_type_counts >= 5000])
+
+# filtering the dataset
+df1 <- subset(df1, Game_type %in% game_types_to_keep)
+df1$Game_type <- factor(df1$Game_type)
+
+table(df1$Game_type)
+```
+
+
+```{r}
+# Summary statistics
+summary(df1[c("average_white_sd", "average_black_sd", "sd_difference")])
+
+# Additional statistics
+library(psych)  # for the describe function
+psych::describe(df1[c("average_white_sd_logged", "average_black_sd_logged", "sd_average_difference_logged")])
+
+```
+
+
+```{r}
+# Frequency distribution for Game_type
+table(df1$Game_type)
+
+# Bar plot for Game_type
+library(ggplot2)
+ggplot(df1, aes(x = Game_type)) +
+  geom_bar() +
+  labs(title = "Frequency of Game Types", x = "Game Type", y = "Count") +
+  theme_minimal()
+
+```
+
+
+```{r}
+# Correlation between average_white_sd and average_black_sd
+cor(df1$average_white_sd_logged, df1$average_black_sd_logged)
+
+# Plotting the correlation
+ggplot(df1, aes(x = average_white_sd_logged, y = average_black_sd_logged)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = "Correlation between Average logged SD of White and Black Players",
+       x = "Average logged SD of White", y = "Average logged SD of Black") +
+  theme_minimal()
+
+```
+
+
+```{r}
+## checking the model assumptions
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$Game_type <- as.factor(df1$Game_type)
+
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+
+table(df1$Game_type)
+
+game_type_counts <- table(df1$Game_type)
+
+game_types_to_keep <- names(game_type_counts[game_type_counts >= 5000])
+
+df1 <- subset(df1, Game_type %in% game_types_to_keep)
+df1$Game_type <- factor(df1$Game_type)
+
+
+table(df1$Game_type)
+
+df1$Result <- factor(df1$Result, levels = c(2, 1, 0), labels = c("Draw", "White wins", "Black wins"))
+
+
+model <- multinom(Result ~ sd_average_difference_logged * Game_type, data = df1)
+```
+
+```{r}
+tab_model(model)
+```
+
+```{r}
+library(car)
+vif(model)  # Calculates VIF for each predictor
+```
+
+
+```{r}
+library(pROC)
+
+probs <- predict(model, newdata = df1, type = "probs")
+
+roc_result <- multiclass.roc(response = df1$Result, predictor = probs)
+
+# AUC result
+print(roc_result$auc)
+
+# print the entire ROC result object to examine other details
+print(roc_result)
+```
+
+
+```{r}
+library(nnet)  
+
+# Predict probabilities
+probs <- predict(model, newdata = df1, type = "probs")
+total_counts <- table(df1$Result)
+expected <- sweep(probs, 2, total_counts, "*")
+expected_counts <- colSums(expected)
+observed_counts <- table(df1$Result)
+chi_test <- chisq.test(x = observed_counts, p = expected_counts / sum(expected_counts))
+
+# Print the test result
+print(chi_test)
+```
+
+
+```{r}
+
+### for the descriptive stats tables
+
+df1 <- read.csv("final_df1_with_game_type_corrected_average_sd.csv")
+df1$Game_type <- as.factor(df1$Game_type)
+
+df1$sd_average_difference_logged <- log(df1$average_white_sd + 1) - log(df1$average_black_sd + 1) 
+df1$average_white_sd_logged <- log(df1$average_white_sd + 1)
+df1$average_black_sd_logged <- log(df1$average_black_sd + 1)
+
+table(df1$Game_type)
+
+game_type_counts <- table(df1$Game_type)
+
+game_types_to_keep <- names(game_type_counts[game_type_counts >= 5000])
+
+df1 <- subset(df1, Game_type %in% game_types_to_keep)
+df1$Game_type <- factor(df1$Game_type)
+
+
+table(df1$Game_type)
+```
+
+
+```{r}
+
+library(dplyr)
+
+# calculating means and sd for the descriptive statistics table in the report
+results <- df1 %>%
+  group_by(Game_type) %>%
+  summarise(
+    mean_sd_average_difference_logged = round(mean(sd_average_difference_logged, na.rm = TRUE), 2),
+    sd_sd_average_difference_logged = round(sd(sd_average_difference_logged, na.rm = TRUE), 2),
+    mean_average_white_sd_logged = round(mean(average_white_sd_logged, na.rm = TRUE), 2),
+    sd_average_white_sd_logged = round(sd(average_white_sd_logged, na.rm = TRUE), 2),
+    mean_average_black_sd_logged = round(mean(average_black_sd_logged, na.rm = TRUE), 2),
+    sd_average_black_sd_logged = round(sd(average_black_sd_logged, na.rm = TRUE), 2),
+    mean_abs_WhiteRatingDiff = round(mean(abs(WhiteRatingDiff), na.rm = TRUE), 2) 
+
+  )
+
+# display results
+print(results)
+
+```
+
+```{r}
+                      
+```
+
+
+```{r}
+# Checking the number of sd moves that are not 0
+
+library(dplyr)
+library(purrr)
+library(stringr)
+
+parse_and_count_nonzero <- function(sd_string) {
+  # Remove the brackets and split the string into a vector
+  sd_vector <- str_remove_all(sd_string, "\\[|\\]") %>%
+               str_split(", ") %>%
+               unlist()
+  
+  # Convert to numeric, replacing 'None' with NA
+  sd_numeric <- as.numeric(replace(sd_vector, sd_vector == "None", NA))
+  
+  # Return the count of non-zero values
+  sum(!is.na(sd_numeric) & sd_numeric != 0, na.rm = TRUE)
+}
+
+result <- df1 %>%
+  mutate(
+    # Parse the sd column and count the total moves as the length of the list
+    TotalMoves = map_int(sd, ~ length(str_split(str_remove_all(.x, "\\[|\\]"), ", ")[[1]])),
+    # Use the custom function to count non-zero SDs
+    NonZeroSDCount = map_int(sd, ~ parse_and_count_nonzero(.x)),
+    # Calculate the percentage of non-zero SDs
+    PercentNonZeroSD = NonZeroSDCount / TotalMoves * 100
+  ) %>%
+  group_by(Game_type) %>%
+  summarise(
+    
+    AverageMoves = mean(TotalMoves, na.rm = TRUE), # Average moves per game type
+    sd_AverageMoves. = sd(TotalMoves, na.rm = TRUE),
+    AveragePercentNonZeroSD = mean(PercentNonZeroSD, na.rm = TRUE), # Average percentage of non-zero SDs per game type
+    Asd_veragePercentNonZeroSD = sd(PercentNonZeroSD, na.rm = TRUE)
+  )
+
+# Display the results
+print(result)
+
+```

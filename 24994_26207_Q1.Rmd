@@ -1,0 +1,365 @@
+---
+title: "Question 1"
+output: html_notebook
+---
+
+
+```{r}
+
+#### Whether time spent affects riskiness
+
+```
+
+```{r}
+
+## install.packages("Matrixs)
+
+library(readxl)
+library(ggplot2)
+
+df2 <- read.csv("final_df2_with_game_type.csv")
+
+df2$GameIndex <- as.factor(df2$GameIndex)
+
+df2$TimeControl <- as.factor(df2$TimeControl)
+
+df2$SD <- log(df2$SD + 1)   ##### Taking natural log
+
+
+df2$Player <- paste(df2$Player, df2$GameIndex, sep = "_")
+
+# Removing the useless modules 
+
+df2$Date <- NULL
+df2$Round <- NULL
+df2$UTCDate <- NULL
+df2$Event <- NULL
+
+
+# # split them up into game type, did a fixed effect model before
+# df2_blitz <- df2[df2$Game_type == "Blitz", ]
+# df2_rapid <- df2[df2$Game_type == "Rapid", ]
+# df2_bullet <- df2[df2$Game_type == "Bullet", ]
+# df2_classical <- df2[df2$Game_type == "Classical", ]
+# df2_ultrabullet <- df2[df2$Game_type == "UltraBullet", ]
+
+```
+
+
+
+
+```{r}
+table(df2$TimeControl)
+
+# Count the occurrences of each TimeControl type
+#timeControlCounts <- table(df2$TimeControl)
+
+# Find TimeControl types with 1000 or more occurrences
+#timeControlsToKeep <- names(timeControlCounts[timeControlCounts >= 10000])
+
+# Finding 3 highest values for the time control of rapid, bullet and blitz
+#TimeControl_to_keep <- names(TimeControl_counts[TimeControl_counts >= 900])
+
+#newDf <- subset(df2, TimeControl %in% timeControlsToKeep)
+
+
+timeControlsToKeep1 <- c("600+0", "600+5", "900+10", "120+1", "30+0", "60+0", "180+0", "180+2", "300+0")
+
+# Filter df2 to keep only rows with Game_type types with 5000 or more occurrences
+newDf <- subset(df2, TimeControl %in% timeControlsToKeep1)
+newDf$TimeControl <- factor(newDf$TimeControl)
+
+
+# Changing the name so that it is easier to understand
+new_labels <- c("600+0" = "600+0 (Rapid)", "600+5" = "600+5 (Rapid)", "900+10" = "900+10 (Rapid)",
+                "120+1" = "120+1 (Bullet)", "30+0" = "30+0 (Bullet)", "60+0" = "60+0 (Bullet)",
+                "180+0" = "180+0 (Blitz)", "180+2" = "180+2 (Blitz)", "300+0" = "300+0 (Blitz)")
+
+# Map the new labels onto the existing factor levels
+newDf$TimeControl <- factor(newDf$TimeControl, levels = names(new_labels), labels = new_labels)
+
+
+table(newDf$TimeControl)
+
+library(dplyr)
+
+# Randomly select 100 rows, just to check that everything would run
+#set.seed(441)
+#newDf <- sample_n(newDf, 400)
+
+table(newDf$TimeControl)
+```
+
+```{r}
+# Generating the scatter plot to visualise the data
+plot <- ggplot(newDf, aes(x = SD)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(x = "SD", y = "Frequency", title = paste("Hitogram of SD -", name)) +
+  theme_minimal()
+
+# Print the plot
+print(plot)
+```
+```{r}
+# Generate the scatter plot
+plot <- ggplot(newDf, aes(x = TimeSpent, y = SD)) +
+  geom_point(alpha = 0.2) +
+  labs(x = "Time Spent", y = "SD", title = paste("Scatterplot of Time Spent vs SD -", name)) +
+  theme_minimal()
+
+print(plot)
+
+
+# generating the scatter plot with color coding based on TimeControl
+plot <- ggplot(newDf, aes(x = TimeSpent, y = SD, colour = TimeControl)) +
+  geom_point(alpha = 0.2) +
+  labs(x = "Time Spent", y = "SD", title = paste("Scatterplot of Time Spent vs SD -", name)) +
+  theme_minimal()
+
+print(plot)
+
+```
+
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+
+dataframes_list <- list(
+  newDf = newDf
+
+)
+
+# Generating some more scatterplot
+for (name in names(dataframes_list)) {
+  dataframe <- dataframes_list[[name]]
+  
+  quantile_90 <- quantile(dataframe$TimeSpent, .99, na.rm = TRUE)
+  
+  dataframe_filtered <- dataframe %>%
+    filter(TimeSpent <= quantile_90)
+  
+  plot <- ggplot(dataframe_filtered, aes(x = TimeSpent, y = SD)) +
+    geom_point(alpha = 0.2) +
+    labs(x = "Time Spent", y = "SD", title = paste("Scatterplot of Time Spent vs SD -", name)) +
+    theme_minimal()
+  
+  print(plot)
+}
+
+newDf <- dataframe_filtered
+
+newDf_8 <- newDf %>%
+  group_by(GameIndex) %>%
+  filter(n() >= 8) %>%
+  ungroup()
+
+```
+
+```{r}
+```
+
+
+```{r}
+## linear model
+
+### make one with just linear model, not hierarchial
+linear_model <- lm(SD ~ TimeSpent + Game_type, data = newDf)
+summary(linear_model)
+
+# # Identify high leverage points in the linear model
+# hat_values <- hatvalues(linear_model)
+# high_leverage_points_lm <- which(hat_values > (2 * mean(hat_values)))
+# 
+# # Remove high leverage points
+# newDf_clean_lm <- newDf[-high_leverage_points_lm, ]
+# 
+# # Refit the linear model without high leverage points
+# linear_model_clean <- lm(SD ~ TimeSpent + Game_type, data = newDf_clean_lm)
+# 
+# summary(linear_model_clean)
+# #plot(linear_model_clean)
+
+linear_model_2 <- lm(SD ~ TimeSpent + Game_type + Score, data = newDf)
+summary(linear_model_2)
+
+summary(lm(SD ~ TimeSpent, data = newDf))
+
+anova(linear_model, linear_model_2)
+```
+
+
+```{r}
+library(lme4)
+## baseline model
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_baseline <- lmer(SD ~ 1 + (1 | Player) + (1 | GameIndex), data = newDf, control = control, 
+                       REML = FALSE)
+summary(model_baseline)
+
+
+```
+
+
+```{r}
+## model 1 (just adding TimeSpent as a fixed effect)
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_1 <- lmer(SD ~ TimeSpent + (1 | Player) + (1 | GameIndex), data = newDf, REML = FALSE,
+                control = control)
+summary(model_1)
+```
+
+
+```{r}
+
+## model 2 (time spent under player)
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_2 <- lmer(SD ~ TimeSpent + TimeControl + (1+ TimeSpent | Player) + (1 | GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_2)
+
+
+```
+
+
+```{r}
+
+## model 3 (time spent under game)
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_3 <- lmer(SD ~ TimeSpent + TimeControl + (1 | Player) + (1 + TimeSpent | GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_3)
+
+```
+
+```{r}
+library(lmerTest)
+
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_4 <- lmer(SD ~ TimeSpent + TimeControl + (1 + TimeSpent| Player) + (1 + TimeSpent | GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_4)
+```
+
+```{r}
+model_nested <- lmer(SD ~ TimeSpent + TimeControl + (1| Player) + (1| Player:GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_nested)
+
+model_nested_2 <- lmer(SD ~ TimeSpent + TimeControl + (1 + TimeSpent| Player) + (1| Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_nested_2)
+
+model_nested_3 <- lmer(SD ~ TimeSpent + TimeControl + (1 + TimeSpent| Player) + (1 + TimeSpent| Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_nested_3)
+
+model_nested_4 <- lmer(SD ~ TimeSpent + TimeControl + (1 | Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_nested_4)
+
+model_nested_5 <- lmer(SD ~ TimeSpent + TimeControl + (1 + TimeSpent| Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_nested_5)
+```
+
+
+```{r}
+model_w_eval <- lmer(SD ~ TimeSpent + TimeControl + Score + (1 + TimeSpent| Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_w_eval)
+
+model_w_eval_2 <- lmer(SD ~ TimeSpent + TimeControl + Score + (1 + TimeSpent| Player) + (1| Player:GameIndex), data = newDf,control = control, REML = FALSE)
+summary(model_w_eval_2)
+
+model_w_eval_3 <- lmer(SD ~ TimeSpent + TimeControl + Score + (1+ TimeSpent | Player) + (1 | GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_w_eval_3)
+
+model_w_eval_4 <- lmer(SD ~ TimeSpent + TimeControl + Score + (1 | Player) + (1 + TimeSpent| GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_w_eval_4)
+
+model_w_eval_5 <- lmer(SD ~ TimeSpent + TimeControl + Score + (1 + TimeSpent | Player) + (1 + TimeSpent| GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_w_eval_5)
+```
+
+
+```{r}
+# Likelihood-Ratio tests, trying all the combinations here, redid it for GameType as well
+lrt_result_1 <- anova(model_baseline, model_1)
+print(lrt_result_1)
+
+
+lrt_result_2 <- anova(model_1, model_2)
+print(lrt_result_2)
+
+
+lrt_result_3 <- anova(model_2, model_3)
+print(lrt_result_3)
+
+
+lrt_result_4 <- anova(model_3, model_4)
+print(lrt_result_4)
+
+lrt_result_5 <- anova(model_2, model_nested_2)
+print(lrt_result_5)
+
+anova(model_3, model_4)
+```
+
+```{r}
+anova(model_w_eval_4, model_w_eval_5)
+```
+
+
+```{r}
+# Calculating the ICC 
+
+# Baseline model
+var_components <- VarCorr(model_baseline)
+player_variance <- attr(var_components$Player, "stddev")^2
+gameIndex_variance <- attr(var_components$GameIndex, "stddev")^2
+residual_variance <- attr(var_components, "sc")^2
+icc_baseline <- (player_variance + gameIndex_variance) / (player_variance + gameIndex_variance + residual_variance)
+print(icc_baseline)
+
+
+
+# Extract variance components from the model
+var_components <- VarCorr(model_1)
+player_variance <- attr(var_components$Player, "stddev")^2
+gameIndex_variance <- attr(var_components$GameIndex, "stddev")^2
+residual_variance <- attr(var_components, "sc")^2
+icc_model_1 <- (player_variance + gameIndex_variance) / (player_variance + gameIndex_variance + residual_variance)
+print(icc_model_1)
+
+# Model 2
+var_components <- VarCorr(model_2)
+player_variance <- sum(attr(var_components$Player, "stddev")^2)  # This now includes the variance due to TimeSpent
+gameIndex_variance <- attr(var_components$GameIndex, "stddev")^2
+residual_variance <- attr(var_components, "sc")^2
+icc_model_2 <- (player_variance + gameIndex_variance) / (player_variance + gameIndex_variance + residual_variance)
+print(icc_model_2)
+
+# Model 3 
+var_components <- VarCorr(model_3)
+player_variance <- attr(var_components$Player, "stddev")^2
+gameIndex_variance <- sum(attr(var_components$GameIndex, "stddev")^2)  # Includes TimeSpent variance
+residual_variance <- attr(var_components, "sc")^2
+icc_model_3 <- (player_variance + gameIndex_variance) / (player_variance + gameIndex_variance + residual_variance)
+print(icc_model_3)
+
+
+```
+
+
+```{r}
+car::Anova(model_4, type=3)
+```
+
+
+```{r}
+library(afex)
+
+mixed(model_4, data =newDf)
+```
+
+
+```{r}
+control <- lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+model_4_t <- lmer(SD ~ TimeSpent + Game_type + (1 + TimeSpent| Player) + (1 + TimeSpent | GameIndex), data = newDf, control = control, REML = FALSE)
+summary(model_4_t)
+```
+
+=
